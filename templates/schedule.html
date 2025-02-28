@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Weekly Schedule</title>
+  <!-- Bootstrap CSS for responsive design -->
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <style>
+    body {
+      padding-top: 80px;
+      font-size: 1.1rem;
+      line-height: 1.6;
+    }
+    .shift-cell {
+      padding: 12px;
+      margin: 4px;
+      border-radius: 5px;
+      color: #333;
+      font-weight: 500;
+      text-align: center;
+    }
+    /* High-contrast, accessible colors */
+    .morning { background-color: rgb(230, 230, 150); } 
+    .evening { background-color: rgb(140, 140, 210); }
+    .PreferredDayOff { background-color: rgb(150, 230, 150); }
+    .AssignedDayOff { background-color: rgb(255, 120, 120); }
+    table {
+      margin-top: 20px;
+    }
+    th, td {
+      vertical-align: middle !important;
+    }
+    .table-responsive {
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation Bar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top" role="navigation">
+    <a class="navbar-brand" href="{{ url_for('index') }}">Schedule Planner</a>
+    <button class="navbar-toggler" type="button" data-toggle="collapse" 
+      data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" 
+      aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>    
+    <div class="collapse navbar-collapse" id="navbarNav">
+      <ul class="navbar-nav mr-auto">
+        <li class="nav-item {% if request.path == '/' %}active{% endif %}">
+          <a class="nav-link" href="{{ url_for('index') }}">Employee Management</a>
+        </li>
+        <li class="nav-item {% if request.path == '/schedule' %}active{% endif %}">
+          <a class="nav-link" href="{{ url_for('schedule_view') }}">View Schedule</a>
+        </li>
+        <li class="nav-item {% if request.path == '/settings' %}active{% endif %}">
+          <a class="nav-link" href="{{ url_for('settings') }}">Settings</a>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <main class="container" role="main">
+    <h1 class="mt-4">Weekly Schedule</h1>
+    <div class="table-responsive">
+      <table class="table table-bordered" aria-label="Weekly Schedule Table">
+        <thead class="thead-light">
+          <tr>
+            <th scope="col">Employee</th>
+            {% for day in days %}
+              <th scope="col">{{ day }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for emp in employees %}
+            <tr>
+              <th scope="row">{{ emp }}</th>
+              {% for day in days %}
+                {% set shift = employee_schedule[emp][day] if day in employee_schedule[emp] else "N/A" %}
+                {% set css_class = "" %}
+                {% if "Morning" in shift %}
+                  {% set css_class = "morning" %}
+                {% elif "Evening" in shift %}
+                  {% set css_class = "evening" %}
+                {% elif "Preferred Day Off" in shift %}
+                  {% set css_class = "PreferredDayOff" %}
+                {% elif "Assigned Day Off" in shift %}
+                  {% set css_class = "AssignedDayOff" %}
+                {% endif %}
+                <td>
+                  <div class="shift-cell {{ css_class }}" role="article" aria-label="{{ emp }} on {{ day }}: {{ shift }}">
+                    {{ shift }}
+                  </div>
+                </td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- Bootstrap JS and dependencies -->
+  <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+</body>
+</html>
