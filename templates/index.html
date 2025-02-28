@@ -73,14 +73,15 @@
             <option value="6-hour">6-hour</option>
           </select>
         </div>
+        <!-- Updated Preferred Days Off as a multi-select -->
         <div class="form-group">
-          <label for="preferred_day_off">Preferred Day Off:</label>
-          <select class="form-control" name="preferred_day_off" id="preferred_day_off">
-            <option value="">None</option>
+          <label for="preferred_day_off">Preferred Days Off:</label>
+          <select class="form-control" name="preferred_day_off" id="preferred_day_off" multiple>
             {% for day in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] %}
               <option value="{{ day }}">{{ day }}</option>
             {% endfor %}
           </select>
+          <small class="form-text text-muted">Select up to 2 days (for 8-hour employees, only used when the workweek is 7 days).</small>
         </div>
         <div class="form-group">
           <label for="manual_days_off">Manual Days Off:</label>
@@ -114,8 +115,8 @@
           <li class="list-group-item d-flex justify-content-between align-items-center">
             <div>
               <strong>{{ emp.name }}</strong> - {{ emp.shift_type }}
-              {% if emp.preferred_day_off %} (Prefers: {{ emp.preferred_day_off }}){% endif %}
-              {% if emp.manual_days_off %} (Manual Off: {{ emp.manual_days_off }}){% endif %}
+              {% if emp.preferred_day_off and emp.preferred_day_off|length > 0 %} (Prefers: {{ emp.preferred_day_off }}){% endif %}
+              {% if emp.manual_days_off and emp.manual_days_off|length > 0 %} (Manual Off: {{ emp.manual_days_off }}){% endif %}
               {% if emp.shift_requests and emp.shift_requests|length > 0 %}
                 (Shift Requests: {{ emp.shift_requests }})
               {% endif %}

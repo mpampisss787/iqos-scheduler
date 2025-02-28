@@ -17,7 +17,7 @@
   </style>
 </head>
 <body>
-  <!-- Navigation Bar (same as index.html) -->
+  <!-- Navigation Bar -->
   <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top" role="navigation">
     <a class="navbar-brand" href="{{ url_for('index') }}">Schedule Planner</a>
     <div class="collapse navbar-collapse" id="navbarNav">
@@ -49,14 +49,15 @@
           <option value="6-hour" {% if employee.shift_type == '6-hour' %}selected{% endif %}>6-hour</option>
         </select>
       </div>
+      <!-- Update Preferred Days Off as a multi-select -->
       <div class="form-group">
-        <label for="preferred_day_off">Preferred Day Off:</label>
-        <select class="form-control" name="preferred_day_off" id="preferred_day_off">
-          <option value="">None</option>
+        <label for="preferred_day_off">Preferred Days Off:</label>
+        <select class="form-control" name="preferred_day_off" id="preferred_day_off" multiple>
           {% for day in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] %}
-            <option value="{{ day }}" {% if employee.preferred_day_off == day %}selected{% endif %}>{{ day }}</option>
+            <option value="{{ day }}" {% if employee.preferred_day_off and day in employee.preferred_day_off %}selected{% endif %}>{{ day }}</option>
           {% endfor %}
         </select>
+        <small class="form-text text-muted">Select up to 2 days for 8-hour employees.</small>
       </div>
       <div class="form-group">
         <label for="manual_days_off">Manual Days Off:</label>

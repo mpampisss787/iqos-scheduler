@@ -13,7 +13,7 @@ app.config['WEEK_WORKING_DAYS'] = 7
 
 db = SQLAlchemy(app)
 
-# Optional: Enum for weekdays (if needed)
+# Optional: Enum for weekdays
 class WeekdayEnum(enum.Enum):
     Monday = 'Monday'
     Tuesday = 'Tuesday'
@@ -27,8 +27,9 @@ class Employee(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     shift_type = db.Column(db.String(10), nullable=False)  # "8-hour" or "6-hour"
-    preferred_day_off = db.Column(db.String(20), nullable=True)
-    # manual_days_off stored as JSON list, e.g. ["Monday", "Wednesday"]
+    # Now allowing multiple preferred days off (as a list)
+    preferred_day_off = db.Column(db.JSON, nullable=True, default=list)
+    # manual_days_off stored as a JSON list, e.g. ["Monday", "Wednesday"]
     manual_days_off = db.Column(db.JSON, nullable=True, default=list)
     # shift_requests stored as JSON dictionary, e.g. {"Monday": "Morning", "Friday": "Evening"}
     shift_requests = db.Column(db.JSON, nullable=True, default=dict)
@@ -46,7 +47,7 @@ def generate_schedule():
             • For 6‑hour employees in a 7‑day week: if no off is chosen, default off = ["Sunday"].
             • For 8‑hour employees:
                  - In a 6‑day week: they work 5 days; Sunday is forced off.
-                 - In a 7‑day week: they must have 2 off days. If they haven’t chosen 2, additional off days are assigned dynamically.
+                 - In a 7‑day week: they must have 2 off days. If they haven’t chosen 2 preferred off days, additional off days are assigned dynamically.
       - In the displayed schedule, an off day is marked as "Preferred Day Off" if explicitly chosen,
         or "Assigned Day Off" if set automatically.
     """
@@ -60,7 +61,7 @@ def generate_schedule():
             if emp.shift_type == '8-hour':
                 explicit = []
                 if emp.preferred_day_off:
-                    explicit.append(emp.preferred_day_off)
+                    explicit.extend(emp.preferred_day_off)
                 if emp.manual_days_off:
                     explicit.extend(emp.manual_days_off)
                 effective = explicit.copy()
@@ -74,11 +75,11 @@ def generate_schedule():
             if emp.shift_type == '8-hour':
                 explicit = []
                 if emp.preferred_day_off:
-                    explicit.append(emp.preferred_day_off)
+                    explicit.extend(emp.preferred_day_off)
                 if emp.manual_days_off:
                     explicit.extend(emp.manual_days_off)
                 default_off[emp.name] = explicit.copy()
-                # Dynamically assign additional off days if fewer than 2.
+                # If fewer than 2 off days are specified, assign additional off days dynamically.
                 while len(default_off[emp.name]) < 2:
                     for d in candidate_days:
                         if d not in default_off[emp.name]:
@@ -103,19 +104,20 @@ def generate_schedule():
     for day in days:
         working_8 = []
         for emp in employees_8:
+            # Build list of explicitly chosen off days.
             chosen_off = []
             if emp.preferred_day_off:
-                chosen_off.append(emp.preferred_day_off)
+                chosen_off.extend(emp.preferred_day_off)
             if emp.manual_days_off:
                 chosen_off.extend(emp.manual_days_off)
-            # For a 6-day week, force Sunday off; for a 7-day week, use chosen off if available.
+            # For a 6-day week, force Sunday off; for a 7-day week, if none chosen, use defaults.
             if app.config.get('WEEK_WORKING_DAYS', 6) == 6:
                 if "Sunday" not in chosen_off:
                     chosen_off.append("Sunday")
             elif not chosen_off and emp.name in default_off:
                 chosen_off = default_off[emp.name]
             if day in chosen_off:
-                label = "Preferred Day Off" if day in (emp.preferred_day_off, *(emp.manual_days_off or [])) else "Assigned Day Off"
+                label = "Preferred Day Off" if day in (emp.preferred_day_off if emp.preferred_day_off else []) else "Assigned Day Off"
                 schedule[day].append({'employee': emp.name, 'shift': label})
             else:
                 working_8.append(emp)
@@ -162,13 +164,13 @@ def generate_schedule():
             for emp in employees_6:
                 chosen_off = []
                 if emp.preferred_day_off:
-                    chosen_off.append(emp.preferred_day_off)
+                    chosen_off.extend(emp.preferred_day_off)
                 if emp.manual_days_off:
                     chosen_off.extend(emp.manual_days_off)
                 if not chosen_off and emp.name in default_off:
                     chosen_off = default_off[emp.name]
                 if day in chosen_off:
-                    label = "Preferred Day Off" if day in (emp.preferred_day_off, *(emp.manual_days_off or [])) else "Assigned Day Off"
+                    label = "Preferred Day Off" if day in (emp.preferred_day_off if emp.preferred_day_off else []) else "Assigned Day Off"
                     schedule[day].append({'employee': emp.name, 'shift': label})
                 else:
                     working_6.append(emp)
@@ -245,9 +247,11 @@ def index():
     if request.method == 'POST':
         name = request.form['name']
         shift_type = request.form['shift_type']
-        preferred_day_off = request.form.get('preferred_day_off')
+        # Now preferred_day_off is expected as a list; use getlist.
+        preferred_day_off = request.form.getlist('preferred_day_off')
+        preferred_day_off = preferred_day_off if preferred_day_off else []
         manual_days_off = request.form.getlist('manual_days_off')
-        manual_days_off = manual_days_off if manual_days_off else None
+        manual_days_off = manual_days_off if manual_days_off else []
         days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         shift_requests = {}
         for day in days:
@@ -279,9 +283,11 @@ def edit_employee(employee_id):
     if request.method == 'POST':
         emp.name = request.form['name']
         emp.shift_type = request.form['shift_type']
-        emp.preferred_day_off = request.form.get('preferred_day_off')
+        # For editing, get list for preferred_day_off.
+        preferred_day_off = request.form.getlist('preferred_day_off')
+        emp.preferred_day_off = preferred_day_off if preferred_day_off else []
         manual_days_off = request.form.getlist('manual_days_off')
-        emp.manual_days_off = manual_days_off if manual_days_off else None
+        emp.manual_days_off = manual_days_off if manual_days_off else []
         days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         shift_requests = {}
         for day in days:
@@ -339,7 +345,6 @@ def download():
     """Download the schedule as a CSV file."""
     schedule = generate_schedule()
     file_path = "schedule.csv"
-    # Transform schedule into a DataFrame for export.
     schedule_output = []
     for day, assignments in schedule.items():
         for assign in assignments:
