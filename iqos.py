@@ -1,6 +1,9 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file
 from flask_sqlalchemy import SQLAlchemy
 import enum
+from collections import defaultdict
+import pandas as pd
+import random
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///store_scheduler.db'
@@ -10,7 +13,7 @@ app.config['WEEK_WORKING_DAYS'] = 7
 
 db = SQLAlchemy(app)
 
-# Optional: Enum for weekdays
+# Optional: Enum for weekdays (if needed)
 class WeekdayEnum(enum.Enum):
     Monday = 'Monday'
     Tuesday = 'Tuesday'
@@ -25,7 +28,7 @@ class Employee(db.Model):
     name = db.Column(db.String(100), nullable=False)
     shift_type = db.Column(db.String(10), nullable=False)  # "8-hour" or "6-hour"
     preferred_day_off = db.Column(db.String(20), nullable=True)
-    # manual_days_off stored as a JSON list, e.g. ["Monday", "Wednesday"]
+    # manual_days_off stored as JSON list, e.g. ["Monday", "Wednesday"]
     manual_days_off = db.Column(db.JSON, nullable=True, default=list)
     # shift_requests stored as JSON dictionary, e.g. {"Monday": "Morning", "Friday": "Evening"}
     shift_requests = db.Column(db.JSON, nullable=True, default=dict)
@@ -42,10 +45,8 @@ def generate_schedule():
       - Off-day assignment:
             • For 6‑hour employees in a 7‑day week: if no off is chosen, default off = ["Sunday"].
             • For 8‑hour employees:
-                 - In a 6‑day week: they work 5 days; Sunday is forced off, plus one additional off assigned dynamically if needed.
-                 - In a 7‑day week: they must have 2 off days. For 8‑hour employees, we now compute effective off days as the union
-                   of any chosen off days (preferred and manual) and, if WEEK_WORKING_DAYS==6, force Sunday off.
-                   (In a 7‑day week, if they haven’t chosen 2 off days, additional off days are assigned dynamically.)
+                 - In a 6‑day week: they work 5 days; Sunday is forced off.
+                 - In a 7‑day week: they must have 2 off days. If they haven’t chosen 2, additional off days are assigned dynamically.
       - In the displayed schedule, an off day is marked as "Preferred Day Off" if explicitly chosen,
         or "Assigned Day Off" if set automatically.
     """
@@ -102,7 +103,6 @@ def generate_schedule():
     for day in days:
         working_8 = []
         for emp in employees_8:
-            # For 8-hour employees, compute effective off days:
             chosen_off = []
             if emp.preferred_day_off:
                 chosen_off.append(emp.preferred_day_off)
@@ -269,6 +269,32 @@ def index():
     employees = Employee.query.all()
     return render_template('index.html', employees=employees)
 
+@app.route('/edit/<int:employee_id>', methods=['GET', 'POST'])
+def edit_employee(employee_id):
+    emp = Employee.query.get(employee_id)
+    if not emp:
+        flash("Employee not found.")
+        return redirect(url_for('index'))
+    
+    if request.method == 'POST':
+        emp.name = request.form['name']
+        emp.shift_type = request.form['shift_type']
+        emp.preferred_day_off = request.form.get('preferred_day_off')
+        manual_days_off = request.form.getlist('manual_days_off')
+        emp.manual_days_off = manual_days_off if manual_days_off else None
+        days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        shift_requests = {}
+        for day in days:
+            req = request.form.get("shift_request_" + day)
+            if req and req != "No Request":
+                shift_requests[day] = req
+        emp.shift_requests = shift_requests
+        db.session.commit()
+        flash('Employee updated successfully!')
+        return redirect(url_for('index'))
+    
+    return render_template("edit.html", employee=emp)
+
 @app.route('/delete/<int:employee_id>', methods=['POST'])
 def delete_employee(employee_id):
     emp = Employee.query.get(employee_id)
@@ -308,7 +334,21 @@ def schedule_view():
     employees = sorted(employee_schedule.keys())
     return render_template('schedule.html', employee_schedule=employee_schedule, days=days, employees=employees)
 
-if __name__ == '__main__':
+@app.route('/download')
+def download():
+    """Download the schedule as a CSV file."""
+    schedule = generate_schedule()
+    file_path = "schedule.csv"
+    # Transform schedule into a DataFrame for export.
+    schedule_output = []
+    for day, assignments in schedule.items():
+        for assign in assignments:
+            schedule_output.append({"Day": day, "Employee": assign["employee"], "Shift": assign["shift"]})
+    df = pd.DataFrame(schedule_output)
+    df.to_csv(file_path, index=False)
+    return send_file(file_path, as_attachment=True)
+
+if __name__ == "__main__":
     with app.app_context():
         db.create_all()
     app.run(debug=True)

@@ -120,9 +120,12 @@
                 (Shift Requests: {{ emp.shift_requests }})
               {% endif %}
             </div>
-            <form action="{{ url_for('delete_employee', employee_id=emp.id) }}" method="post" onsubmit="return confirm('Delete {{ emp.name }}?');">
-              <button type="submit" class="btn btn-danger btn-sm" aria-label="Delete {{ emp.name }}">Delete</button>
-            </form>
+            <div>
+              <a href="{{ url_for('edit_employee', employee_id=emp.id) }}" class="btn btn-warning btn-sm">Edit</a>
+              <form action="{{ url_for('delete_employee', employee_id=emp.id) }}" method="post" style="display:inline;" onsubmit="return confirm('Delete {{ emp.name }}?');">
+                <button type="submit" class="btn btn-danger btn-sm" aria-label="Delete {{ emp.name }}">Delete</button>
+              </form>
+            </div>
           </li>
         {% endfor %}
       </ul>
