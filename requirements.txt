@@ -19,3 +19,5 @@ smmap==5.0.0
 urllib3==2.0.3
 waitress==3.0.2
 Flask==2.2.5
+gunicorn==20.1.0
+eventlet==0.33.3
