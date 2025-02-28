@@ -18,3 +18,4 @@ six==1.16.0
 smmap==5.0.0
 urllib3==2.0.3
 waitress==3.0.2
+Flask==2.2.5
