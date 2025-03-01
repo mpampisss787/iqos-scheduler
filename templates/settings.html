@@ -8,8 +8,20 @@
   <style>
     body {
       padding-top: 80px;
-      font-size: 1.1rem;
+      font-size: 1rem;
       line-height: 1.6;
+    }
+    .min-staff-row {
+      margin-bottom: 10px;
+    }
+    .min-staff-label {
+      width: 100px;
+      display: inline-block;
+    }
+    .min-staff-input {
+      width: 60px;
+      display: inline-block;
+      margin-right: 10px;
     }
   </style>
 </head>
@@ -38,7 +50,7 @@
   </nav>
 
   <main class="container" role="main">
-    <h1 class="mt-4">Workweek Settings</h1>
+    <h1 class="mt-4">Workweek &amp; Minimum Staffing Settings</h1>
     {% with messages = get_flashed_messages() %}
       {% if messages %}
         <div class="alert alert-success" role="alert">
@@ -54,12 +66,20 @@
           <option value="7" {% if workweek == 7 %}selected{% endif %}>7 days (All week, off by choice)</option>
         </select>
       </div>
+      <h4>Minimum Staffing per Shift (per day)</h4>
       <div class="form-group">
-        <label for="min_staff">Minimum Staff Required per Shift:</label>
-        <input type="number" class="form-control" name="min_staff" id="min_staff" min="1" value="{{ min_staff }}">
-        <small class="form-text text-muted">Enter the minimum number of employees required per shift (3 for morning and 3 for evening).</small>
+        {% for day in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] %}
+          <div class="min-staff-row">
+            <strong>{{ day }}:</strong>
+            <label class="min-staff-label" for="min_morning_{{ day }}">Morning:</label>
+            <input type="number" class="min-staff-input" name="min_morning_{{ day }}" id="min_morning_{{ day }}" min="0" value="{{ min_staff_day[day]['morning'] if min_staff_day and min_staff_day[day] else 3 }}">
+            <label class="min-staff-label" for="min_evening_{{ day }}">Evening:</label>
+            <input type="number" class="min-staff-input" name="min_evening_{{ day }}" id="min_evening_{{ day }}" min="0" value="{{ min_staff_day[day]['evening'] if min_staff_day and min_staff_day[day] else 3 }}">
+          </div>
+        {% endfor %}
       </div>
       <button type="submit" class="btn btn-primary">Save Settings</button>
+      <a href="{{ url_for('schedule_view') }}" class="btn btn-success ml-2">Generate Schedule</a>
     </form>
   </main>
 
