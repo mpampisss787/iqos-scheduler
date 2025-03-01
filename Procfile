@@ -1,1 +1,1 @@
-web: waitress-serve --listen=*:5000 iqos:app
+web: gunicorn iqos:app --worker-class gevent --bind 0.0.0.0:$PORT
