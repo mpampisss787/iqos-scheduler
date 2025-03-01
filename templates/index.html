@@ -52,7 +52,11 @@
   </nav>
 
   <main class="container" role="main">
-    <h1 class="mt-4">Employee Management</h1>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h1 class="mt-4">Employee Management</h1>
+      <!-- Generate Schedule button added here -->
+      <a href="{{ url_for('schedule_view') }}" class="btn btn-success">Generate Schedule</a>
+    </div>
     {% with messages = get_flashed_messages() %}
       {% if messages %}
         <div class="alert alert-success" role="alert">
