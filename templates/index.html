@@ -98,8 +98,7 @@
         {% for day in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] %}
           <div class="form-group">
             <label for="shift_request_{{ day }}">Shift Request for {{ day }}:</label>
-            <select class="form-control" name="shift_request_" id="shift_request_{{ day }}" 
-                    name="shift_request_{{ day }}">
+            <select class="form-control" name="shift_request_{{ day }}" id="shift_request_{{ day }}">
               <option value="No Request" selected>No Request</option>
               <option value="Morning">Morning</option>
               <option value="Evening">Evening</option>

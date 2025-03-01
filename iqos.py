@@ -15,10 +15,9 @@ app.config['WEEK_WORKING_DAYS'] = 7
 
 db = SQLAlchemy(app)
 
-# Custom JSON types to safely handle empty strings.
+# --- Custom JSON Types to Safely Handle Empty Strings ---
 
 class SafeJSONList(TypeDecorator):
-    """Stores a JSON list safely; if the stored value is empty or null, returns an empty list."""
     impl = TEXT
     cache_ok = True
 
@@ -28,12 +27,14 @@ class SafeJSONList(TypeDecorator):
         return json.dumps(value)
 
     def process_result_value(self, value, dialect):
-        if not value or value.strip() == "":
+        if value is None or value.strip() == "":
             return []
-        return json.loads(value)
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return []
 
 class SafeJSONDict(TypeDecorator):
-    """Stores a JSON dict safely; if the stored value is empty or null, returns an empty dict."""
     impl = TEXT
     cache_ok = True
 
@@ -43,11 +44,14 @@ class SafeJSONDict(TypeDecorator):
         return json.dumps(value)
 
     def process_result_value(self, value, dialect):
-        if not value or value.strip() == "":
+        if value is None or value.strip() == "":
             return {}
-        return json.loads(value)
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return {}
 
-# Optional: Enum for weekdays
+# --- Optional: Enum for weekdays ---
 class WeekdayEnum(enum.Enum):
     Monday = 'Monday'
     Tuesday = 'Tuesday'
@@ -57,6 +61,7 @@ class WeekdayEnum(enum.Enum):
     Saturday = 'Saturday'
     Sunday = 'Sunday'
 
+# --- Employee Model ---
 class Employee(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
@@ -97,7 +102,6 @@ def generate_schedule():
                 explicit.extend(emp.preferred_day_off)
                 explicit.extend(emp.manual_days_off)
                 effective = explicit.copy()
-                # Force Sunday off in a 6-day workweek.
                 if "Sunday" not in effective:
                     effective.append("Sunday")
                 default_off[emp.name] = effective
@@ -109,7 +113,6 @@ def generate_schedule():
                 explicit.extend(emp.preferred_day_off)
                 explicit.extend(emp.manual_days_off)
                 default_off[emp.name] = explicit.copy()
-                # Dynamically assign additional off days if fewer than 2 are specified.
                 while len(default_off[emp.name]) < 2:
                     for d in candidate_days:
                         if d not in default_off[emp.name]:
@@ -137,7 +140,6 @@ def generate_schedule():
             chosen_off = []
             chosen_off.extend(emp.preferred_day_off)
             chosen_off.extend(emp.manual_days_off)
-            # For a 6-day week, force Sunday off; for a 7-day week, if none chosen, use defaults.
             if app.config.get('WEEK_WORKING_DAYS', 6) == 6:
                 if "Sunday" not in chosen_off:
                     chosen_off.append("Sunday")
