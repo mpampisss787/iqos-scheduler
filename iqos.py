@@ -4,6 +4,8 @@ import enum
 from collections import defaultdict
 import pandas as pd
 import random
+import json
+from sqlalchemy.types import TypeDecorator, TEXT
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///store_scheduler.db'
@@ -12,6 +14,38 @@ app.config['SECRET_KEY'] = 'your-secret-key'
 app.config['WEEK_WORKING_DAYS'] = 7
 
 db = SQLAlchemy(app)
+
+# Custom JSON types to safely handle empty strings.
+
+class SafeJSONList(TypeDecorator):
+    """Stores a JSON list safely; if the stored value is empty or null, returns an empty list."""
+    impl = TEXT
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return json.dumps([])
+        return json.dumps(value)
+
+    def process_result_value(self, value, dialect):
+        if not value or value.strip() == "":
+            return []
+        return json.loads(value)
+
+class SafeJSONDict(TypeDecorator):
+    """Stores a JSON dict safely; if the stored value is empty or null, returns an empty dict."""
+    impl = TEXT
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return json.dumps({})
+        return json.dumps(value)
+
+    def process_result_value(self, value, dialect):
+        if not value or value.strip() == "":
+            return {}
+        return json.loads(value)
 
 # Optional: Enum for weekdays
 class WeekdayEnum(enum.Enum):
@@ -27,14 +61,16 @@ class Employee(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     shift_type = db.Column(db.String(10), nullable=False)  # "8-hour" or "6-hour"
-    # Now stored as JSON lists/dict.
-    preferred_day_off = db.Column(db.JSON, nullable=True, default=list)
-    manual_days_off = db.Column(db.JSON, nullable=True, default=list)
-    shift_requests = db.Column(db.JSON, nullable=True, default=dict)
+    # Store preferred_day_off as a JSON list (allowing multiple days)
+    preferred_day_off = db.Column(SafeJSONList, nullable=True, default=list)
+    # manual_days_off stored as a JSON list
+    manual_days_off = db.Column(SafeJSONList, nullable=True, default=list)
+    # shift_requests stored as a JSON dict
+    shift_requests = db.Column(SafeJSONDict, nullable=True, default=dict)
 
 def generate_schedule():
     """
-    Build the weekly schedule with the following rules:
+    Build the weekly schedule under these rules:
       - No employee works more than 3 consecutive days with the same shift.
       - Weekly limits:
             * 8‑hour employees work at most 5 days (40 hours).
@@ -50,15 +86,6 @@ def generate_schedule():
         or "Assigned Day Off" if set automatically.
     """
     employees = Employee.query.all()
-
-    # Ensure JSON fields are proper types (in case of empty strings in the DB)
-    for emp in employees:
-        if not emp.preferred_day_off or emp.preferred_day_off == "":
-            emp.preferred_day_off = []
-        if not emp.manual_days_off or emp.manual_days_off == "":
-            emp.manual_days_off = []
-        if not emp.shift_requests or emp.shift_requests == "":
-            emp.shift_requests = {}
 
     # Pre-calculate default off days for 8‑hour employees.
     default_off = {}
@@ -107,7 +134,6 @@ def generate_schedule():
     for day in days:
         working_8 = []
         for emp in employees_8:
-            # Build list of explicitly chosen off days.
             chosen_off = []
             chosen_off.extend(emp.preferred_day_off)
             chosen_off.extend(emp.manual_days_off)
