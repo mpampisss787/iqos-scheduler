@@ -12,6 +12,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///store_scheduler.db'
 app.config['SECRET_KEY'] = 'your-secret-key'
 # Set workweek length: 6 for a closed Sunday, 7 for open all week.
 app.config['WEEK_WORKING_DAYS'] = 7
+# New parameter: minimum number of employees required per shift.
+app.config['MIN_STAFF_PER_SHIFT'] = 3
 
 db = SQLAlchemy(app)
 
@@ -77,7 +79,7 @@ def generate_schedule():
       - Weekly limits:
             * 8‑hour employees work at most 5 days (40 hours).
             * 6‑hour employees work at most 6 days (36 hours).
-      - The store requires at least 3 employees on the morning shift and 3 on the evening shift each day.
+      - The store requires at least MIN_STAFF_PER_SHIFT employees on the morning shift and the same number on the evening shift each day.
       - If an employee submits a valid shift request for a day (and isn’t off), that request is used.
       - Off-day assignment:
             • For 6‑hour employees in a 7‑day week: if no off is chosen, default off = ["Sunday"].
@@ -128,6 +130,7 @@ def generate_schedule():
     days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
     schedule = {day: [] for day in days}
     employee_history = {}
+    min_staff = app.config.get('MIN_STAFF_PER_SHIFT', 3)
 
     # Process 8‑hour employees.
     employees_8 = [e for e in employees if e.shift_type == '8-hour']
@@ -224,12 +227,12 @@ def generate_schedule():
                         candidate = candidate if history.count(candidate) <= history.count(alternate) else alternate
                 schedule[day].append({'employee': emp.name, 'shift': candidate})
                 employee_history.setdefault(emp.name, []).append(candidate)
-        # Post-Processing: Enforce minimum staffing.
+        # Post-Processing: Enforce minimum staffing using the configured parameter.
         working_assignments = [a for a in schedule[day] if "Morning" in a['shift'] or "Evening" in a['shift']]
         morning_count = sum(1 for a in working_assignments if "Morning" in a['shift'])
         evening_count = sum(1 for a in working_assignments if "Evening" in a['shift'])
         if len(working_assignments) >= 6:
-            while morning_count < 3:
+            while morning_count < min_staff:
                 for assignment in schedule[day]:
                     if assignment['shift'] in ["Preferred Day Off", "Assigned Day Off"]:
                         emp_obj = next((e for e in employees if e.name == assignment['employee']), None)
@@ -244,7 +247,7 @@ def generate_schedule():
                             break
                 else:
                     break
-            while evening_count < 3:
+            while evening_count < min_staff:
                 for assignment in schedule[day]:
                     if assignment['shift'] in ["Preferred Day Off", "Assigned Day Off"]:
                         emp_obj = next((e for e in employees if e.name == assignment['employee']), None)
@@ -334,18 +337,29 @@ def delete_employee(employee_id):
 def settings():
     if request.method == 'POST':
         workweek = request.form.get('workweek')
+        min_staff = request.form.get('min_staff')
         if workweek in ['6', '7']:
             app.config['WEEK_WORKING_DAYS'] = int(workweek)
-            flash(f'Workweek updated to {workweek} days.')
+            flash_msg = f'Workweek updated to {workweek} days.'
         else:
-            flash('Invalid selection.')
+            flash_msg = 'Invalid workweek selection.'
+        try:
+            if min_staff is not None and min_staff.strip() != "":
+                app.config['MIN_STAFF_PER_SHIFT'] = int(min_staff)
+                flash_msg += f" Minimum staff per shift set to {min_staff}."
+            else:
+                flash_msg += " Minimum staff per shift unchanged."
+        except ValueError:
+            flash_msg += " Invalid number for minimum staff."
+        flash(flash_msg)
         return redirect(url_for('settings'))
-    return render_template('settings.html', workweek=app.config.get('WEEK_WORKING_DAYS'))
+    # Pass current values to template.
+    return render_template('settings.html', workweek=app.config.get('WEEK_WORKING_DAYS'),
+                           min_staff=app.config.get('MIN_STAFF_PER_SHIFT', 3))
 
 @app.route('/schedule')
 def schedule_view():
     schedule = generate_schedule()
-    # Transform day-based schedule into an employee-based landscape view.
     days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
     employee_schedule = {}
     for day in days:
@@ -360,7 +374,6 @@ def schedule_view():
 
 @app.route('/download')
 def download():
-    """Download the schedule as a CSV file."""
     schedule = generate_schedule()
     file_path = "schedule.csv"
     schedule_output = []
