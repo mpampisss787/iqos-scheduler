@@ -6,19 +6,12 @@
   <!-- Bootstrap CSS for responsive design -->
   <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
   <style>
-    body {
-      padding-top: 80px;
-      font-size: 1.1rem;
-      line-height: 1.6;
-    }
-    .form-section {
-      margin-bottom: 30px;
-    }
+    body { padding-top: 80px; font-size: 1.1rem; line-height: 1.6; }
+    .form-section { margin-bottom: 30px; }
   </style>
 </head>
 <body>
-  <!-- Navigation Bar -->
-  <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top" role="navigation">
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
     <a class="navbar-brand" href="{{ url_for('index') }}">Schedule Planner</a>
     <div class="collapse navbar-collapse" id="navbarNav">
       <ul class="navbar-nav mr-auto">
@@ -34,10 +27,9 @@
       </ul>
     </div>
   </nav>
-
-  <main class="container" role="main">
+  <main class="container">
     <h1 class="mt-4">Edit Employee - {{ employee.name }}</h1>
-    <form method="post" aria-label="Edit Employee Form">
+    <form method="post">
       <div class="form-group">
         <label for="name">Employee Name:</label>
         <input type="text" class="form-control" name="name" id="name" value="{{ employee.name }}" required>
@@ -49,7 +41,6 @@
           <option value="6-hour" {% if employee.shift_type == '6-hour' %}selected{% endif %}>6-hour</option>
         </select>
       </div>
-      <!-- Updated Preferred Days Off as a multi-select -->
       <div class="form-group">
         <label for="preferred_day_off">Preferred Days Off:</label>
         <select class="form-control" name="preferred_day_off" id="preferred_day_off" multiple>
@@ -84,8 +75,6 @@
       <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancel</a>
     </form>
   </main>
-
-  <!-- Bootstrap JS and dependencies -->
   <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
 </body>
