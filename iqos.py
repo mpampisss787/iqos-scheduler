@@ -66,11 +66,8 @@ class Employee(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     shift_type = db.Column(db.String(10), nullable=False)  # "8-hour" or "6-hour"
-    # Store preferred_day_off as a JSON list (allowing multiple days)
     preferred_day_off = db.Column(SafeJSONList, nullable=True, default=list)
-    # manual_days_off stored as a JSON list
     manual_days_off = db.Column(SafeJSONList, nullable=True, default=list)
-    # shift_requests stored as a JSON dict
     shift_requests = db.Column(SafeJSONDict, nullable=True, default=dict)
 
 def generate_schedule():
@@ -99,8 +96,8 @@ def generate_schedule():
         for emp in employees:
             if emp.shift_type == '8-hour':
                 explicit = []
-                explicit.extend(emp.preferred_day_off)
-                explicit.extend(emp.manual_days_off)
+                explicit.extend(emp.preferred_day_off or [])
+                explicit.extend(emp.manual_days_off or [])
                 effective = explicit.copy()
                 if "Sunday" not in effective:
                     effective.append("Sunday")
@@ -110,8 +107,8 @@ def generate_schedule():
         for emp in employees:
             if emp.shift_type == '8-hour':
                 explicit = []
-                explicit.extend(emp.preferred_day_off)
-                explicit.extend(emp.manual_days_off)
+                explicit.extend(emp.preferred_day_off or [])
+                explicit.extend(emp.manual_days_off or [])
                 default_off[emp.name] = explicit.copy()
                 while len(default_off[emp.name]) < 2:
                     for d in candidate_days:
@@ -138,22 +135,22 @@ def generate_schedule():
         working_8 = []
         for emp in employees_8:
             chosen_off = []
-            chosen_off.extend(emp.preferred_day_off)
-            chosen_off.extend(emp.manual_days_off)
+            chosen_off.extend(emp.preferred_day_off or [])
+            chosen_off.extend(emp.manual_days_off or [])
             if app.config.get('WEEK_WORKING_DAYS', 6) == 6:
                 if "Sunday" not in chosen_off:
                     chosen_off.append("Sunday")
             elif not chosen_off and emp.name in default_off:
                 chosen_off = default_off[emp.name]
             if day in chosen_off:
-                label = "Preferred Day Off" if day in (emp.preferred_day_off if emp.preferred_day_off else []) else "Assigned Day Off"
+                label = "Preferred Day Off" if day in (emp.preferred_day_off or []) else "Assigned Day Off"
                 schedule[day].append({'employee': emp.name, 'shift': label})
             else:
                 working_8.append(emp)
         working_8.sort(key=lambda x: x.name)
         n8 = len(working_8)
         for i, emp in enumerate(working_8):
-            req = emp.shift_requests.get(day) if emp.shift_requests else None
+            req = (emp.shift_requests or {}).get(day)
             if req in ["Morning", "Evening"]:
                 if req == "Morning":
                     candidate = 'Morning (08:30–16:30)'
@@ -190,19 +187,19 @@ def generate_schedule():
             working_6 = []
             for emp in employees_6:
                 chosen_off = []
-                chosen_off.extend(emp.preferred_day_off)
-                chosen_off.extend(emp.manual_days_off)
+                chosen_off.extend(emp.preferred_day_off or [])
+                chosen_off.extend(emp.manual_days_off or [])
                 if not chosen_off and emp.name in default_off:
                     chosen_off = default_off[emp.name]
                 if day in chosen_off:
-                    label = "Preferred Day Off" if day in (emp.preferred_day_off if emp.preferred_day_off else []) else "Assigned Day Off"
+                    label = "Preferred Day Off" if day in (emp.preferred_day_off or []) else "Assigned Day Off"
                     schedule[day].append({'employee': emp.name, 'shift': label})
                 else:
                     working_6.append(emp)
             working_6.sort(key=lambda x: x.name)
             n6 = len(working_6)
             for i, emp in enumerate(working_6):
-                req = emp.shift_requests.get(day) if emp.shift_requests else None
+                req = (emp.shift_requests or {}).get(day)
                 if req in ["Morning", "Evening"]:
                     if req == "Morning":
                         candidate = 'Morning (09:00–15:00)'
