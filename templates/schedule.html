@@ -12,26 +12,29 @@
       line-height: 1.4;
     }
     .shift-cell {
-      padding: 6px 4px;  /* reduced padding */
-      margin: 2px;       /* reduced margin */
+      padding: 6px 4px;
+      margin: 2px;
       border-radius: 3px;
       color: #333;
       font-weight: 500;
       text-align: center;
     }
-    /* High-contrast, accessible colors */
+    /* High-contrast colors for shifts */
     .morning { background-color: rgb(230, 230, 150); } 
     .evening { background-color: rgb(140, 140, 210); }
     .PreferredDayOff { background-color: rgb(150, 230, 150); }
     .AssignedDayOff { background-color: rgb(255, 120, 120); }
+    .ManualDayOff { background-color: rgb(255, 80, 80); }
+    /* New style for store closed cells */
+    .StoreClosed { background-color: rgb(200, 200, 200); font-style: italic; }
     table {
       margin-top: 20px;
-      font-size: 0.85rem; /* slightly smaller font size */
+      font-size: 0.85rem;
     }
     th, td {
       vertical-align: middle !important;
       white-space: nowrap;
-      padding: 4px 6px; /* reduced padding for table cells */
+      padding: 4px 6px;
     }
     .table-responsive {
       overflow-x: auto;
@@ -87,8 +90,12 @@
                   {% set css_class = "evening" %}
                 {% elif "Preferred Day Off" in shift %}
                   {% set css_class = "PreferredDayOff" %}
-                {% elif "Assigned Day Off" in shift or "Manual Day Off" in shift %}
+                {% elif "Assigned Day Off" in shift %}
                   {% set css_class = "AssignedDayOff" %}
+                {% elif "Manual Day Off" in shift %}
+                  {% set css_class = "ManualDayOff" %}
+                {% elif "Store Closed" in shift %}
+                  {% set css_class = "StoreClosed" %}
                 {% endif %}
                 <td>
                   <div class="shift-cell {{ css_class }}" role="article" aria-label="{{ emp }} on {{ day }}: {{ shift }}">

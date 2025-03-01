@@ -12,7 +12,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///store_scheduler.db'
 app.config['SECRET_KEY'] = 'your-secret-key'
 # Workweek length: set to 6 (store closed on Sunday) or 7 (full week)
 app.config['WEEK_WORKING_DAYS'] = 6
-# Minimum staff required per shift is now fixed to 3 for morning and 3 for evening.
+# Minimum employees required per shift.
 app.config['MIN_STAFF_PER_SHIFT'] = 3
 
 db = SQLAlchemy(app)
@@ -21,10 +21,12 @@ db = SQLAlchemy(app)
 class SafeJSONList(TypeDecorator):
     impl = TEXT
     cache_ok = True
+
     def process_bind_param(self, value, dialect):
         if value is None:
             return json.dumps([])
         return json.dumps(value)
+
     def process_result_value(self, value, dialect):
         if value is None or value.strip() == "":
             return []
@@ -32,14 +34,16 @@ class SafeJSONList(TypeDecorator):
             return json.loads(value)
         except json.JSONDecodeError:
             return []
-        
+
 class SafeJSONDict(TypeDecorator):
     impl = TEXT
     cache_ok = True
+
     def process_bind_param(self, value, dialect):
         if value is None:
             return json.dumps({})
         return json.dumps(value)
+
     def process_result_value(self, value, dialect):
         if value is None or value.strip() == "":
             return {}
@@ -63,9 +67,9 @@ class Employee(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     shift_type = db.Column(db.String(10), nullable=False)  # "8-hour" or "6-hour"
-    # preferred_day_off: chosen by employee for dynamic off-day assignment
+    # Preferred off days chosen by the employee (for dynamic off-day assignment)
     preferred_day_off = db.Column(SafeJSONList, nullable=True, default=list)
-    # manual_days_off: hard off days set by manager (not overridden)
+    # Manual off days set by the manager (hard off days)
     manual_days_off = db.Column(SafeJSONList, nullable=True, default=list)
     shift_requests = db.Column(SafeJSONDict, nullable=True, default=dict)
 
@@ -74,17 +78,17 @@ def generate_schedule():
     Build the weekly schedule using these rules:
       - 8‑hour employees are contracted to work 5 days in a 7‑day cycle.
         In a 6‑day workweek (store closed on Sunday), we build on a 7‑day cycle,
-        force Sunday off, and then ensure that if the employee’s preferred_day_off (ignoring manual off days)
-        contains fewer than 1 extra off day, one is added dynamically.
+        force Sunday off, and then use the employee’s preferred_day_off list to add one extra off day if missing.
       - 6‑hour employees work up to 6 days.
-      - The store requires at least 3 employees on the morning shift and 3 on the evening shift every day.
+      - The store requires at least 3 employees on both the morning and evening shifts.
       - Valid shift requests (Morning/Evening) are honored if the employee isn’t off.
       - Off-day assignment:
-            • For 6‑hour employees (in a 7‑day week): if no off is chosen, default off = ["Sunday"].
+            • For 6‑hour employees in a 7‑day week: if no off is chosen, default off = ["Sunday"].
             • For 8‑hour employees:
-                 - In a 6‑day week: force Sunday off; if the employee hasn’t chosen an extra preferred off day, add one dynamically.
+                 - In a 6‑day week: force Sunday off; then if the employee’s preferred_day_off (ignoring manual off days)
+                   contains fewer than 1 extra day, add one automatically from Monday–Saturday.
                  - In a 7‑day week: ensure at least 2 off days dynamically.
-      - Manual off days are always applied (and reduce the contract workdays) and are never overridden.
+      - Manual days off are applied as “Manual Day Off” and reduce the contract workdays.
     """
     employees = Employee.query.all()
 
@@ -98,7 +102,6 @@ def generate_schedule():
                 off = preferred.copy()
                 if "Sunday" not in off:
                     off.append("Sunday")
-                # If employee hasn't chosen an extra off day (excluding Sunday), add one from candidate_days.
                 if len(preferred) < 1:
                     for d in candidate_days:
                         if d not in off:
@@ -132,7 +135,7 @@ def generate_schedule():
     employee_history = {}
     min_staff = app.config.get('MIN_STAFF_PER_SHIFT', 3)
 
-    # For 8‑hour employees, contract workdays is normally 5.
+    # For 8‑hour employees, contracted workdays = 5 (unless reduced by manual off days).
     def get_contract_workdays(emp):
         base = 5
         manual = len(emp.manual_days_off or [])
@@ -237,10 +240,20 @@ def generate_schedule():
                 schedule[day].append({'employee': emp.name, 'shift': candidate})
                 employee_history.setdefault(emp.name, []).append(candidate)
                 
-        # Minimum Staffing Enforcement: always enforce at least 3 Morning and 3 Evening shifts.
+    # For 6‑hour employees, in a 6‑day week, explicitly mark Sunday as "Store Closed"
+    if app.config.get('WEEK_WORKING_DAYS', 6) == 6:
+        for emp in [e for e in employees if e.shift_type == '6-hour']:
+            # If emp is not assigned on Sunday, add "Store Closed" assignment
+            if not any(a['employee'] == emp.name for a in schedule["Sunday"]):
+                schedule["Sunday"].append({'employee': emp.name, 'shift': "Store Closed"})
+
+    # Post-Processing: Enforce minimum staffing: at least 3 morning and 3 evening shifts every day.
+    for day in days:
+        # Count assignments with Morning and Evening (excluding off-day labels and "Store Closed")
         morning_count = sum(1 for a in schedule[day] if "Morning" in a['shift'])
         evening_count = sum(1 for a in schedule[day] if "Evening" in a['shift'])
-        while morning_count < 3:
+        # For morning shifts
+        while morning_count < min_staff:
             for assignment in schedule[day]:
                 if assignment['shift'] in ["Preferred Day Off", "Assigned Day Off"]:
                     emp_obj = next((e for e in employees if e.name == assignment['employee']), None)
@@ -254,7 +267,8 @@ def generate_schedule():
                         break
             else:
                 break
-        while evening_count < 3:
+        # For evening shifts
+        while evening_count < min_staff:
             for assignment in schedule[day]:
                 if assignment['shift'] in ["Preferred Day Off", "Assigned Day Off"]:
                     emp_obj = next((e for e in employees if e.name == assignment['employee']), None)
