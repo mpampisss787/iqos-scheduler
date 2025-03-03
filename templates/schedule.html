@@ -1,90 +1,91 @@
+<!-- schedule/templates/schedule.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>Weekly Schedule</title>
-  <!-- Bootstrap CSS for responsive design -->
   <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
   <style>
-    body { padding-top: 80px; font-size: 0.95rem; line-height: 1.4; }
+    body { padding-top: 80px; font-size: 0.95rem; }
     .shift-cell {
-      padding: 8px 4px; margin: 2px; border-radius: 3px; color: #333; font-weight: 500; text-align: center;
+      padding: 8px; margin: 2px;
+      border-radius: 3px;
+      font-weight: 500; text-align: center; color: #333;
     }
-    .morning { background-color: rgb(230, 230, 150); }
-    .evening { background-color: rgb(140, 140, 210); }
-    .PreferredDayOff, .AssignedDayOff { background-color: rgb(150, 230, 150); }
-    .ManualDayOff { background-color: rgb(255, 80, 80); }
-    .StoreClosed { background-color: rgb(200, 200, 200); font-style: italic; }
+    .morning         { background-color: rgb(230,230,150); }
+    .evening         { background-color: rgb(140,140,210); }
+    .PreferredDayOff { background-color: rgb(150,230,150); }
+    .AssignedDayOff  { background-color: rgb(255,120,120); }
+    .ManualDayOff    { background-color: rgb(255,80,80);    }
+    .StoreClosed     { background-color: rgb(200,200,200);  font-style: italic; }
     table { margin-top: 20px; font-size: 0.85rem; }
-    th, td { vertical-align: middle !important; white-space: nowrap; padding: 4px 6px; }
-    .table-responsive { overflow-x: auto; }
+    th, td { white-space: nowrap; vertical-align: middle !important; }
   </style>
 </head>
 <body>
   <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
-    <a class="navbar-brand" href="{{ url_for('index') }}">Schedule Planner</a>
-    <button class="navbar-toggler" type="button" data-toggle="collapse" 
-            data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" 
-            aria-label="Toggle navigation">
-      <span class="navbar-toggler-icon"></span>
-    </button>    
+    <a class="navbar-brand" href="{{ url_for('employees.list_or_create') }}">Schedule Planner</a>
     <div class="collapse navbar-collapse" id="navbarNav">
       <ul class="navbar-nav mr-auto">
-        <li class="nav-item {% if request.path == '/' %}active{% endif %}">
-          <a class="nav-link" href="{{ url_for('index') }}">Employee Management</a>
+        <li class="nav-item">
+          <a class="nav-link" href="{{ url_for('employees.list_or_create') }}">Employees</a>
         </li>
-        <li class="nav-item {% if request.path == '/schedule' %}active{% endif %}">
-          <a class="nav-link" href="{{ url_for('schedule_view') }}">View Schedule</a>
+        <li class="nav-item">
+          <a class="nav-link" href="{{ url_for('schedule.schedule_view') }}">Schedule</a>
         </li>
-        <li class="nav-item {% if request.path == '/settings' %}active{% endif %}">
-          <a class="nav-link" href="{{ url_for('settings') }}">Settings</a>
+        <li class="nav-item">
+          <a class="nav-link" href="{{ url_for('settings.settings_view') }}">Settings</a>
         </li>
       </ul>
     </div>
   </nav>
+
   <main class="container">
     <h1 class="mt-4">Weekly Schedule</h1>
-    <div class="table-responsive">
-      <table class="table table-bordered">
-        <thead class="thead-light">
+
+    <a href="{{ url_for('schedule.download_txt') }}" class="btn btn-info mb-3">Export Debug TXT</a>
+    <a href="{{ url_for('schedule.download_csv') }}" class="btn btn-secondary mb-3">Export CSV</a>
+
+    <table class="table table-bordered">
+      <thead class="thead-light">
+        <tr>
+          <th>Employee</th>
+          {% for day in days %}
+            <th>{{ day }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for emp in employees %}
           <tr>
-            <th>Employee</th>
+            <th>{{ emp }}</th>
             {% for day in days %}
-              <th>{{ day }}</th>
+              {% set shift = employee_schedule[emp].get(day, "N/A") %}
+              {% set css_class = "" %}
+              {% if "Morning" in shift %}
+                {% set css_class = "morning" %}
+              {% elif "Evening" in shift %}
+                {% set css_class = "evening" %}
+              {% elif "Preferred Day Off" in shift %}
+                {% set css_class = "PreferredDayOff" %}
+              {% elif "Assigned Day Off" in shift %}
+                {% set css_class = "AssignedDayOff" %}
+              {% elif "Manual Day Off" in shift %}
+                {% set css_class = "ManualDayOff" %}
+              {% elif "Store Closed" in shift %}
+                {% set css_class = "StoreClosed" %}
+              {% endif %}
+              <td>
+                <div class="shift-cell {{ css_class }}">{{ shift }}</div>
+              </td>
             {% endfor %}
           </tr>
-        </thead>
-        <tbody>
-          {% for emp in employees %}
-            <tr>
-              <th>{{ emp }}</th>
-              {% for day in days %}
-                {% set shift = employee_schedule[emp][day] if day in employee_schedule[emp] else "N/A" %}
-                {% set css_class = "" %}
-                {% if "Morning" in shift %}
-                  {% set css_class = "morning" %}
-                {% elif "Evening" in shift %}
-                  {% set css_class = "evening" %}
-                {% elif "Preferred Day Off" in shift %}
-                  {% set css_class = "PreferredDayOff" %}
-                {% elif "Assigned Day Off" in shift %}
-                  {% set css_class = "AssignedDayOff" %}
-                {% elif "Manual Day Off" in shift %}
-                  {% set css_class = "ManualDayOff" %}
-                {% elif "Store Closed" in shift %}
-                  {% set css_class = "StoreClosed" %}
-                {% endif %}
-                <td>
-                  <div class="shift-cell {{ css_class }}">{{ shift }}</div>
-                </td>
-              {% endfor %}
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+        {% endfor %}
+      </tbody>
+    </table>
   </main>
-  <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+
+  <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
