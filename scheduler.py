@@ -4,7 +4,7 @@ import random
 from collections import defaultdict
 
 from flask import current_app
-from .models import Employee
+from models import Employee
 
 class Scheduler:
     """
