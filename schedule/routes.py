@@ -3,8 +3,8 @@
 from flask import Blueprint, render_template, send_file, current_app
 import pandas as pd
 
-from ..models import Employee
-from ..scheduler import generate_schedule
+from models import Employee
+from scheduler import generate_schedule
 
 schedule_bp = Blueprint('schedule', __name__, template_folder='templates')
 
