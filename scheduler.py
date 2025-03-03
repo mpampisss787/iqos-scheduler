@@ -395,7 +395,7 @@ def generate_schedule():
     It retrieves config from current_app, loads employees, and generates the schedule.
     """
     from flask import current_app
-    from .models import Employee
+    from models import Employee
 
     config = current_app.config
     all_emps = Employee.query.all()
