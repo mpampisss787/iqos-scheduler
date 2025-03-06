@@ -1,0 +1,96 @@
+=== DEBUG CONFIG SETTINGS ===
+WEEK_WORKING_DAYS: 6
+Default MIN_STAFF_PER_SHIFT (fallback): 3
+MIN_STAFF_PER_SHIFT_DAY:
+  Monday: morning=3, evening=3
+  Tuesday: morning=3, evening=3
+  Wednesday: morning=3, evening=3
+  Thursday: morning=3, evening=3
+  Friday: morning=4, evening=3
+  Saturday: morning=3, evening=3
+  Sunday: morning=0, evening=0
+
+=== Monday (MinStaff: morning=3, evening=3) ===
+Γιάννης (8-hour): Evening (13:30–21:30)
+Δήμητρα  (8-hour): Evening (13:30–21:30)
+Δώρα (8-hour): Morning (08:30–16:30)
+Ελεάνα (8-hour): Morning (08:30–16:30)
+Ηλιάνα (6-hour): Evening (15:00–21:00)
+Ιωάννα (8-hour): Morning (08:30–16:30)
+Μπάμπης (8-hour): Preferred Day Off
+Ξανθίππη (8-hour): Preferred Day Off
+Σμαράγδα (8-hour): Evening (13:30–21:30)
+Φιλίππα (8-hour): Morning (08:30–16:30)
+
+=== Tuesday (MinStaff: morning=3, evening=3) ===
+Γιάννης (8-hour): Evening (13:30–21:30)
+Δήμητρα  (8-hour): Evening (13:30–21:30)
+Δώρα (8-hour): Preferred Day Off
+Ελεάνα (8-hour): Evening (13:30–21:30)
+Ηλιάνα (6-hour): Morning (09:00–15:00)
+Ιωάννα (8-hour): Morning (08:30–16:30)
+Μπάμπης (8-hour): Morning (08:30–16:30)
+Ξανθίππη (8-hour): Morning (08:30–16:30)
+Σμαράγδα (8-hour): Preferred Day Off
+Φιλίππα (8-hour): Morning (08:30–16:30)
+
+=== Wednesday (MinStaff: morning=3, evening=3) ===
+Γιάννης (8-hour): Morning (08:30–16:30)
+Δήμητρα  (8-hour): Morning (08:30–16:30)
+Δώρα (8-hour): Morning (08:30–16:30)
+Ελεάνα (8-hour): Evening (13:30–21:30)
+Ηλιάνα (6-hour): Evening (15:00–21:00)
+Ιωάννα (8-hour): Preferred Day Off
+Μπάμπης (8-hour): Morning (08:30–16:30)
+Ξανθίππη (8-hour): Evening (13:30–21:30)
+Σμαράγδα (8-hour): Morning (08:30–16:30)
+Φιλίππα (8-hour): Evening (13:30–21:30)
+
+=== Thursday (MinStaff: morning=3, evening=3) ===
+Γιάννης (8-hour): Morning (08:30–16:30)
+Δήμητρα  (8-hour): Morning (08:30–16:30)
+Δώρα (8-hour): Evening (13:30–21:30)
+Ελεάνα (8-hour): Morning (08:30–16:30)
+Ηλιάνα (6-hour): Morning (09:00–15:00)
+Ιωάννα (8-hour): Evening (13:30–21:30)
+Μπάμπης (8-hour): Evening (13:30–21:30)
+Ξανθίππη (8-hour): Evening (13:30–21:30)
+Σμαράγδα (8-hour): Morning (08:30–16:30)
+Φιλίππα (8-hour): Morning (08:30–16:30)
+
+=== Friday (MinStaff: morning=4, evening=3) ===
+Γιάννης (8-hour): Preferred Day Off
+Δήμητρα  (8-hour): Preferred Day Off
+Δώρα (8-hour): Morning (08:30–16:30)
+Ελεάνα (8-hour): Evening (13:30–21:30)
+Ηλιάνα (6-hour): Morning (09:00–15:00)
+Ιωάννα (8-hour): Morning (08:30–16:30)
+Μπάμπης (8-hour): Evening (13:30–21:30)
+Ξανθίππη (8-hour): Morning (08:30–16:30)
+Σμαράγδα (8-hour): Evening (13:30–21:30)
+Φιλίππα (8-hour): Manual Day Off
+
+=== Saturday (MinStaff: morning=3, evening=3) ===
+Γιάννης (8-hour): Evening (13:30–21:30)
+Δήμητρα  (8-hour): Evening (13:30–21:30)
+Δώρα (8-hour): Morning (08:30–16:30)
+Ελεάνα (8-hour): Preferred Day Off
+Ηλιάνα (6-hour): Evening (15:00–21:00)
+Ιωάννα (8-hour): Morning (08:30–16:30)
+Μπάμπης (8-hour): Morning (08:30–16:30)
+Ξανθίππη (8-hour): Morning (08:30–16:30)
+Σμαράγδα (8-hour): Evening (13:30–21:30)
+Φιλίππα (8-hour): Preferred Day Off
+
+=== Sunday (MinStaff: morning=0, evening=0) ===
+Γιάννης (8-hour): Store Closed
+Δήμητρα  (8-hour): Store Closed
+Δώρα (8-hour): Store Closed
+Ελεάνα (8-hour): Store Closed
+Ηλιάνα (6-hour): Store Closed
+Ιωάννα (8-hour): Store Closed
+Μπάμπης (8-hour): Store Closed
+Ξανθίππη (8-hour): Store Closed
+Σμαράγδα (8-hour): Store Closed
+Φιλίππα (8-hour): Store Closed
+

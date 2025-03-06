@@ -1,123 +1,95 @@
-# scheduler.py
-
 import random
 from collections import defaultdict
 
 from flask import current_app
-from models import Employee
+from .models import Employee
 
 class Scheduler:
     """
-    Encapsulates all the scheduling logic:
-      1) Off-day assignment for 8-hour vs 6-hour employees
-      2) Shift assignment (respecting requests, contract limits, and consecutive shift rules)
-      3) Minimum staffing enforcement
-      4) Post-processing if 7-day week (ensuring no 8-hour employee goes over limit)
+    Encapsulates scheduling logic:
+      1) Off-day assignment for 8-hour vs 6-hour employees.
+      2) Shift assignment (respecting requests, contract limits, and consecutive shift rules).
+      3) Minimum staffing enforcement.
+      4) Post-processing for 7-day week.
     """
 
     def __init__(self, config):
-        # config is typically current_app.config
         self.config = config
+        # New settings for preferred overrides:
+        self.lock_preferred_overrides = config.get("LOCK_PREFERRED_OVERRIDES", True)
+        self.preferred_override_threshold = config.get("PREFERRED_OVERRIDE_THRESHOLD", 2)
+        # Ensure the max consecutive shifts rule is set to a low value for employee well-being.
+        # If the configuration value is greater than 2, force it to 2.
+        if config.get('max_consecutive', 3) > 2:
+            config['max_consecutive'] = 2
+        if config.get("WEEK_WORKING_DAYS", 7) == 6:
+            config.setdefault("MIN_STAFF_PER_SHIFT_DAY", {})["Sunday"] = {"morning": 0, "evening": 0}
 
     def generate_schedule(self, employees):
-        """
-        Generate a dictionary like:
-            {
-              "Monday": [
-                {"employee": "Alice", "shift": "Morning (08:30–16:30)", "explicit": False},
-                {"employee": "Bob",   "shift": "Preferred Day Off",      "explicit": False},
-                ...
-              ],
-              "Tuesday": [...],
-              ...
-              "Sunday":  [...]
-            }
-        """
         days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         schedule = {d: [] for d in days}
 
-        # Build each employee's contract limit
         contract_limit = {}
         for emp in employees:
             manual_off_count = len(emp.manual_days_off or [])
             if emp.shift_type == "8-hour":
-                # In 7-day mode, 8-hour employees can work max 6 days (only Sunday off)
-                # In 6-day mode, they work 6 days (Sunday closed)
-                contract_limit[emp.name] = (6 if self.config.get("WEEK_WORKING_DAYS", 7) == 7 else 6) - manual_off_count
+                contract_limit[emp.name] = 5 - manual_off_count
             else:
-                # 6-hour employees can work max 6 days (or less if manual offs)
                 contract_limit[emp.name] = (6 if self.config.get("WEEK_WORKING_DAYS", 7) == 7 else 6) - manual_off_count
 
-        # Compute default "off" days for each employee
         default_off = self._compute_default_off(employees)
-
-        # We'll keep a record of each day's assignments
         employee_history = defaultdict(list)
 
-        # 1) Assign shifts for 8-hour employees
         self._assign_shifts_8h(schedule, days, employees, contract_limit, default_off, employee_history)
-
-        # 2) Assign shifts for 6-hour employees
         self._assign_shifts_6h(schedule, days, employees, contract_limit, default_off, employee_history)
-
-        # 3) Enforce minimum staffing
         self._enforce_min_staff(schedule, days, employees, contract_limit, employee_history)
 
-        # 4) If 7-day week, ensure no 8-hour employee goes over limit
         if self.config.get('WEEK_WORKING_DAYS', 6) == 7:
             self._post_process_8h_7day(schedule, days, employees, contract_limit)
 
         return schedule
 
     def _compute_default_off(self, employees):
-        """
-        For each employee, determine any 'auto' or 'fallback' off days, depending on store config.
-          - For 8-hour employees in a 6-day week, force Sunday plus one extra day if none chosen.
-          - For 8-hour employees in a 7-day week, force only Sunday off.
-          - For 6-hour employees in 7-day: if no off is chosen, default to Sunday.
-        """
         default_off = {}
         days_6 = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
         days_7 = days_6 + ["Sunday"]
+        week_days = self.config.get("WEEK_WORKING_DAYS", 7)
 
         for emp in employees:
-            # Merge any already-chosen off days (preferred or manual)
             off_list = set(emp.preferred_day_off or []).union(set(emp.manual_days_off or []))
-
             if emp.shift_type == "8-hour":
-                if self.config.get("WEEK_WORKING_DAYS", 6) == 6:
-                    # 6-day scenario: force Sunday off plus one extra if none preferred
+                if week_days == 6:
                     if "Sunday" not in off_list:
                         off_list.add("Sunday")
-                    # When no preferred off is set, choose an extra day,
-                    # but avoid any day for which there is an explicit shift request.
-                    if len(emp.preferred_day_off or []) < 1:
+                    if len(off_list) < 2:
                         request_days = set(emp.shift_requests.keys() if emp.shift_requests else [])
                         candidates = [d for d in days_6 if d not in off_list and d not in request_days]
                         random.shuffle(candidates)
                         if candidates:
                             off_list.add(candidates[0])
                 else:
-                    # 7-day scenario: force only Sunday off (ignore extra random off)
-                    off_list.add("Sunday")
+                    if len(off_list) < 2:
+                        candidates = [d for d in days_7 if d not in off_list]
+                        random.shuffle(candidates)
+                        if candidates:
+                            off_list.add(candidates[0])
             else:
-                # 6-hour employees
-                if self.config.get("WEEK_WORKING_DAYS", 7) == 7:
-                    # If no off chosen at all, default to Sunday
-                    if not off_list:
-                        off_list = {"Sunday"}
+                if week_days == 7 and not off_list:
+                    off_list = {"Sunday"}
             default_off[emp.name] = list(off_list)
-
         return default_off
 
     def _assign_shifts_8h(self, schedule, days, employees, contract_limit, default_off, history):
-        # Filter employees = 8-hour
         e8 = [e for e in employees if e.shift_type == "8-hour"]
-
-        # For 6-day schedule, mark Sunday as Store Closed for 8-hour employees and only process Mon–Sat.
-        if self.config.get("WEEK_WORKING_DAYS", 7) == 6:
+        week_days = self.config.get("WEEK_WORKING_DAYS", 7)
+        if week_days == 6:
             for emp in e8:
-                schedule["Sunday"].append({"employee": emp.name, "shift": "Store Closed", "explicit": False})
+                schedule["Sunday"].append({
+                    "employee": emp.name,
+                    "shift": "Store Closed",
+                    "explicit": False,
+                    "source": "manual"
+                })
             days_to_process = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
         else:
             days_to_process = days
@@ -126,24 +98,35 @@ class Scheduler:
             working_8 = []
             for emp in e8:
                 union_off = set(emp.preferred_day_off or []).union(emp.manual_days_off or [])
-                # Also incorporate any "default_off"
                 union_off = union_off.union(default_off.get(emp.name, []))
                 if day in union_off:
-                    label = "Manual Day Off" if day in (emp.manual_days_off or []) else "Preferred Day Off"
-                    schedule[day].append({"employee": emp.name, "shift": label, "explicit": False})
+                    source = "manual" if day in (emp.manual_days_off or []) else "preferred"
+                    label = "Manual Day Off" if source == "manual" else "Preferred Day Off"
+                    schedule[day].append({
+                        "employee": emp.name,
+                        "shift": label,
+                        "explicit": False,
+                        "source": source
+                    })
                 else:
                     working_8.append(emp)
-            working_8.sort(key=lambda x: x.name)
+            if week_days == 7:
+                random.shuffle(working_8)
+            else:
+                working_8.sort(key=lambda x: x.name)
             self._assign_for_group(schedule, day, working_8, contract_limit, history, shift_type="8-hour")
 
     def _assign_shifts_6h(self, schedule, days, employees, contract_limit, default_off, history):
-        # Filter employees = 6-hour
         e6 = [e for e in employees if e.shift_type == "6-hour"]
-
-        # For 6-day schedule, mark Sunday as Store Closed for all 6-hour employees and process Mon–Sat.
-        if self.config.get("WEEK_WORKING_DAYS", 7) == 6:
+        week_days = self.config.get("WEEK_WORKING_DAYS", 7)
+        if week_days == 6:
             for emp in e6:
-                schedule["Sunday"].append({"employee": emp.name, "shift": "Store Closed", "explicit": False})
+                schedule["Sunday"].append({
+                    "employee": emp.name,
+                    "shift": "Store Closed",
+                    "explicit": False,
+                    "source": "manual"
+                })
             relevant_days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
         else:
             relevant_days = days
@@ -154,31 +137,46 @@ class Scheduler:
                 union_off = set(emp.preferred_day_off or []).union(emp.manual_days_off or [])
                 union_off = union_off.union(default_off.get(emp.name, []))
                 if day in union_off:
-                    label = "Manual Day Off" if day in (emp.manual_days_off or []) else "Preferred Day Off"
-                    schedule[day].append({"employee": emp.name, "shift": label, "explicit": False})
+                    source = "manual" if day in (emp.manual_days_off or []) else "preferred"
+                    label = "Manual Day Off" if source == "manual" else "Preferred Day Off"
+                    schedule[day].append({
+                        "employee": emp.name,
+                        "shift": label,
+                        "explicit": False,
+                        "source": source
+                    })
                 else:
                     working_6.append(emp)
-            working_6.sort(key=lambda x: x.name)
+            if week_days == 7:
+                random.shuffle(working_6)
+            else:
+                working_6.sort(key=lambda x: x.name)
             self._assign_for_group(schedule, day, working_6, contract_limit, history, shift_type="6-hour")
 
     def _assign_for_group(self, schedule, day, group, contract_limit, history, shift_type):
         """
-        Place each employee in "Morning" or "Evening" (or force day off if their contract is exhausted)
-        while considering explicit requests and the three-consecutive rule.
+        Dynamically assign shifts for a group of employees.
+        If an employee has an explicit request, it is honored.
+        Otherwise, the assignment is balanced evenly between morning and evening.
         """
-        half = len(group) // 2
-
+        req_morn = self.config["MIN_STAFF_PER_SHIFT_DAY"].get(day, {}).get("morning", 3)
+        req_eve = self.config["MIN_STAFF_PER_SHIFT_DAY"].get(day, {}).get("evening", 3)
+        dynamic_morn = sum(1 for a in schedule[day] if a.get("source") == "dynamic" and "Morning" in a["shift"])
+        dynamic_eve = sum(1 for a in schedule[day] if a.get("source") == "dynamic" and "Evening" in a["shift"])
         for idx, emp in enumerate(group):
             name = emp.name
             used_shifts = sum(("Morning" in s or "Evening" in s) for s in history[name])
             if used_shifts >= contract_limit[name]:
-                schedule[day].append({"employee": name, "shift": "Assigned Day Off", "explicit": False})
+                schedule[day].append({
+                    "employee": name,
+                    "shift": "Assigned Day Off",
+                    "explicit": False,
+                    "source": "dynamic"
+                })
                 history[name].append("Assigned Day Off")
                 continue
 
-            # Check explicit shift requests.
             requested = (emp.shift_requests or {}).get(day, "No Request")
-            explicit = False
             if requested == "Morning":
                 candidate, alternate = self._morning_evening(shift_type, morning=True)
                 explicit = True
@@ -186,18 +184,24 @@ class Scheduler:
                 candidate, alternate = self._morning_evening(shift_type, morning=False)
                 explicit = True
             else:
-                if idx < half:
+                if dynamic_morn < dynamic_eve:
                     candidate, alternate = self._morning_evening(shift_type, morning=True)
-                else:
+                elif dynamic_eve < dynamic_morn:
                     candidate, alternate = self._morning_evening(shift_type, morning=False)
+                else:
+                    candidate, alternate = random.choice([
+                        self._morning_evening(shift_type, morning=True),
+                        self._morning_evening(shift_type, morning=False)
+                    ])
+                explicit = False
 
-            # Check 3-consecutive shift rule.
-            if len(history[name]) >= 3:
-                last3 = history[name][-3:]
-                if all(s == candidate for s in last3):
+            # ***** Adjustment: Do not override explicit (preferred) requests via consecutive rule *****
+            max_consec = self.config.get('max_consecutive', 3)
+            if not explicit and max_consec > 0 and len(history[name]) >= max_consec:
+                last_n = history[name][-max_consec:]
+                if all(s == candidate for s in last_n):
                     candidate, alternate = alternate, candidate
 
-            # Check contract usage for the candidate shift.
             used_cand = history[name].count(candidate)
             if used_cand >= contract_limit[name]:
                 used_alt = history[name].count(alternate)
@@ -207,11 +211,16 @@ class Scheduler:
                     candidate = "Assigned Day Off"
                     explicit = False
 
+            source = "preferred" if explicit else "dynamic"
             history[name].append(candidate)
-            schedule[day].append({"employee": name, "shift": candidate, "explicit": explicit})
+            schedule[day].append({
+                "employee": name,
+                "shift": candidate,
+                "explicit": explicit,
+                "source": source
+            })
 
     def _morning_evening(self, shift_type, morning=True):
-        """Return (candidate, alternate) shift labels based on shift_type and preference."""
         if shift_type == "8-hour":
             if morning:
                 return ("Morning (08:30–16:30)", "Evening (13:30–21:30)")
@@ -224,139 +233,109 @@ class Scheduler:
                 return ("Evening (15:00–21:00)", "Morning (09:00–15:00)")
 
     def _enforce_min_staff(self, schedule, days, employees, contract_limit, history):
-        def is_work_shift(s): 
-            return ("Morning" in s or "Evening" in s)
-
+        def is_evening_8h(s):
+            return "Evening (13:30–21:30)" in s
+        def is_evening_6h(s):
+            return "Evening (15:00–21:00)" in s
         fallback = self.config.get("MIN_STAFF_PER_SHIFT", 3)
         min_staff_map = self.config.get("MIN_STAFF_PER_SHIFT_DAY", {})
-
-        days = sorted(days, key=lambda x: (x != 'Saturday', x))  # Prioritize Saturday
-
+        days = sorted(days, key=lambda x: (x != 'Saturday', x))
         for d in days:
             conf = min_staff_map.get(d, {})
             req_morn = conf.get("morning", fallback)
-            req_eve  = conf.get("evening", fallback)
-
+            req_eve = conf.get("evening", fallback)
             day_assignments = schedule[d]
-            morning_count = sum("Morning" in a["shift"] for a in day_assignments)
-            evening_count = sum("Evening" in a["shift"] for a in day_assignments)
-
-            # PHASE A: Try flipping from one shift to the other.
+            morn_count = sum("Morning" in a["shift"] for a in day_assignments)
+            eve_count = sum((1 if is_evening_8h(a["shift"]) else 0.5) for a in day_assignments)
             if d == 'Saturday':
-                needed_morn = max(req_morn - morning_count, 0)
-                needed_eve = max(req_eve - evening_count, 0)
+                needed_morn = max(req_morn - morn_count, 0)
+                needed_eve = max(req_eve - eve_count, 0)
                 if needed_morn > 0 or needed_eve > 0:
                     print(f'⚠ Enforcing staffing on Saturday: morning={needed_morn}, evening={needed_eve}')
-            morning_count = self._flip_shifts_if_needed(
+            morn_count = self._flip_shifts_if_needed(
                 schedule, d, employees, contract_limit, history,
-                needed=req_morn - morning_count,
+                needed=req_morn - morn_count,
                 from_shift="Evening", to_shift="Morning"
             )
-
-            day_assignments = schedule[d]
-            morning_count = sum("Morning" in a["shift"] for a in day_assignments)
-            evening_count = sum("Evening" in a["shift"] for a in day_assignments)
-
-            evening_count = self._flip_shifts_if_needed(
+            eve_count = sum((1 if is_evening_8h(a["shift"]) else 0.5) for a in schedule[d])
+            eve_count = self._flip_shifts_if_needed(
                 schedule, d, employees, contract_limit, history,
-                needed=req_eve - evening_count,
+                needed=req_eve - eve_count,
                 from_shift="Morning", to_shift="Evening"
             )
-
-            # PHASE B: If still short, try overriding off assignments (but never Manual Day Off).
-            day_assignments = schedule[d]
-            morning_count = sum("Morning" in a["shift"] for a in day_assignments)
-            evening_count = sum("Evening" in a["shift"] for a in day_assignments)
-
-            morning_count = self._fill_shortage_off(
+            morn_count = self._fill_shortage_off(
                 schedule, d, employees, contract_limit, history,
-                needed=req_morn - morning_count,
+                needed=req_morn - morn_count,
                 fill_shift="morning"
             )
-            evening_count = self._fill_shortage_off(
+            eve_count = self._fill_shortage_off(
                 schedule, d, employees, contract_limit, history,
-                needed=req_eve - evening_count,
+                needed=req_eve - eve_count,
                 fill_shift="evening"
             )
 
     def _flip_shifts_if_needed(self, schedule, day, employees, contract_limit, history,
-                                 needed, from_shift, to_shift):
-        """
-        If needed > 0, try flipping employees from one shift to the other,
-        ensuring contract limits and manual offs are not violated.
-        IMPORTANT: This function now skips any assignment that was made explicitly.
-        Return the new count of the target shift.
-        """
+                               needed, from_shift, to_shift):
         if needed <= 0:
-            return sum(to_shift in a["shift"] for a in schedule[day])
-
+            return 0
         def is_work_shift(s):
             return ("Morning" in s or "Evening" in s)
-
         day_assignments = schedule[day]
-        to_shift_count = sum(to_shift in a["shift"] for a in day_assignments)
-
+        to_shift_count = 0
         while needed > 0:
             flipped = False
             for rec in day_assignments:
-                # Do not flip if the assignment was made explicitly.
-                if rec.get("explicit", False):
+                if rec.get("source") == "manual":
                     continue
+                if rec.get("source") == "preferred":
+                    if self.lock_preferred_overrides:
+                        continue
+                    else:
+                        if needed < self.preferred_override_threshold:
+                            continue
                 old_shift = rec["shift"]
                 if from_shift in old_shift:
                     emp_name = rec["employee"]
+                    emp_obj = next((e for e in employees if e.name == emp_name), None)
+                    if not emp_obj:
+                        continue
                     used_so_far = sum(is_work_shift(x) for x in history[emp_name])
-                    if used_so_far < contract_limit[emp_name]:
-                        emp_obj = next((e for e in employees if e.name == emp_name), None)
-                        if emp_obj is None:
-                            continue
-                        if emp_obj.shift_type == "8-hour":
-                            new_s = "Morning (08:30–16:30)" if to_shift == "Morning" else "Evening (13:30–21:30)"
-                        else:
-                            new_s = "Morning (09:00–15:00)" if to_shift == "Morning" else "Evening (15:00–21:00)"
-                        rec["shift"] = new_s
-                        for i in reversed(range(len(history[emp_name]))):
-                            if old_shift in history[emp_name][i]:
-                                history[emp_name][i] = new_s
-                                break
-                        to_shift_count += 1
-                        flipped = True
-                        needed -= 1
-                        break
+                    if used_so_far >= contract_limit[emp_name]:
+                        continue
+                    if emp_obj.shift_type == "8-hour":
+                        new_s = "Morning (08:30–16:30)" if to_shift == "Morning" else "Evening (13:30–21:30)"
+                    else:
+                        new_s = "Morning (09:00–15:00)" if to_shift == "Morning" else "Evening (15:00–21:00)"
+                    rec["shift"] = new_s
+                    rec["source"] = "dynamic"
+                    flipped = True
+                    to_shift_count += 1
+                    needed -= 1
+                    break
             if not flipped:
                 break
-
         return to_shift_count
 
     def _fill_shortage_off(self, schedule, day, employees, contract_limit, history,
                            needed, fill_shift):
-        """
-        Attempt to reassign employees from "Preferred Day Off" or "Assigned Day Off"
-        (never "Manual Day Off") to the needed shift if they have contract room.
-        """
         if fill_shift not in ("morning", "evening"):
             return 0
-
-        def is_work_shift(s): 
+        def is_work_shift(s):
             return ("Morning" in s or "Evening" in s)
-
         def choose_shift(shift_type, morning=True):
             if shift_type == "8-hour":
                 return "Morning (08:30–16:30)" if morning else "Evening (13:30–21:30)"
             else:
                 return "Morning (09:00–15:00)" if morning else "Evening (15:00–21:00)"
-
         day_assignments = schedule[day]
         current_count = sum(fill_shift.capitalize() in a["shift"] for a in day_assignments)
         if needed <= 0:
             return current_count
-
         shift_is_morning = (fill_shift == "morning")
-
         for rec in day_assignments:
             if needed <= 0:
                 break
-            if rec["shift"] in ("Preferred Day Off", "Assigned Day Off"):
+            if rec["shift"] == "Assigned Day Off":
                 emp_name = rec["employee"]
                 used_shifts = sum(is_work_shift(x) for x in history[emp_name])
                 if used_shifts < contract_limit[emp_name]:
@@ -364,17 +343,17 @@ class Scheduler:
                     if emp_obj:
                         new_s = choose_shift(emp_obj.shift_type, shift_is_morning)
                         rec["shift"] = new_s
-                        history[emp_name].append(new_s)
+                        for i in reversed(range(len(history[emp_name]))):
+                            if history[emp_name][i] == "Assigned Day Off":
+                                history[emp_name][i] = new_s
+                                break
                         needed -= 1
                         current_count += 1
-
         return current_count
 
     def _post_process_8h_7day(self, schedule, days, employees, contract_limit):
-        """
-        For 7-day weeks, if an 8-hour employee ended up with more working shifts than allowed,
-        remove the excess assignments from the end.
-        """
+        fallback = self.config.get("MIN_STAFF_PER_SHIFT", 3)
+        min_staff_map = self.config.get("MIN_STAFF_PER_SHIFT_DAY", {})
         for emp in employees:
             if emp.shift_type != "8-hour":
                 continue
@@ -385,19 +364,60 @@ class Scheduler:
                         assigned_shifts.append((d, rec))
             limit = contract_limit.get(emp.name, 6)
             while len(assigned_shifts) > limit:
-                d, rec = assigned_shifts.pop()
-                rec["shift"] = "Assigned Day Off"
+                removed = False
+                for i, (d, rec) in enumerate(assigned_shifts):
+                    shift_label = rec["shift"]
+                    day_staff_conf = min_staff_map.get(d, {})
+                    if "Morning" in shift_label:
+                        req = day_staff_conf.get("morning", fallback)
+                        current = sum("Morning" in a["shift"] for a in schedule[d])
+                    elif "Evening" in shift_label:
+                        req = day_staff_conf.get("evening", fallback)
+                        current = sum("Evening" in a["shift"] for a in schedule[d])
+                    else:
+                        continue
+                    if current - 1 >= req:
+                        rec["shift"] = "Assigned Day Off"
+                        assigned_shifts.pop(i)
+                        removed = True
+                        break
+                if not removed:
+                    break
 
+def is_valid_schedule(schedule, config):
+    """
+    Checks that for each day, the number of Morning and Evening assignments
+    meets the minimum staffing requirements.
+    """
+    fallback = config.get("MIN_STAFF_PER_SHIFT", 3)
+    min_staff = config.get("MIN_STAFF_PER_SHIFT_DAY", {})
+    for day, assignments in schedule.items():
+        req_morn = min_staff.get(day, {}).get("morning", fallback)
+        req_eve = min_staff.get(day, {}).get("evening", fallback)
+        morning_count = sum(1 for a in assignments if "Morning" in a["shift"])
+        evening_count = sum(1 for a in assignments if "Evening" in a["shift"])
+        if req_morn > 0 and morning_count < req_morn:
+            return False
+        if req_eve > 0 and evening_count < req_eve:
+            return False
+    return True
 
 def generate_schedule():
     """
-    Convenience function to be used by the schedule routes or elsewhere.
-    It retrieves config from current_app, loads employees, and generates the schedule.
+    Convenience function used by the schedule routes.
+    It retrieves config from current_app, loads employees,
+    and generates a valid schedule by re-running the generator if needed.
     """
     from flask import current_app
-    from models import Employee
-
+    from .models import Employee
     config = current_app.config
     all_emps = Employee.query.all()
     scheduler_obj = Scheduler(config)
-    return scheduler_obj.generate_schedule(all_emps)
+    max_attempts = config.get("MAX_SCHEDULE_ATTEMPTS", 100)
+    for attempt in range(max_attempts):
+        sched = scheduler_obj.generate_schedule(all_emps)
+        if is_valid_schedule(sched, config):
+            print(f"Valid schedule found on attempt {attempt+1}")
+            return sched
+    print(f"Returning last schedule after {max_attempts} attempts.")
+    return sched

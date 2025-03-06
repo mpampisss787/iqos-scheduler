@@ -1,0 +1,19 @@
+Ηλιάνα — 6-hour (Requests: {'Saturday': 'Morning'})
+ 
+Δήμητρα — 8-hour (Prefers: ['Thursday']) (Requests: {'Saturday': 'Morning'})
+ 
+Σμαράγδα — 8-hour (Prefers: ['Friday']) (Requests: {'Monday': 'Morning'})
+ 
+Δώρα — 8-hour (Requests: {'Tuesday': 'Morning'})
+ 
+Ιωάννα — 8-hour (Prefers: ['Saturday']) (Requests: {'Friday': 'Morning'})
+ 
+Ξανθίππη — 8-hour (Prefers: ['Wednesday']) (Requests: {'Tuesday': 'Morning'})
+ 
+Φιλίππα — 8-hour (Prefers: ['Tuesday'])
+ 
+Ελεάνα — 8-hour (Prefers: ['Saturday']) (Manual Off: ['Thursday', 'Friday'])
+ 
+Μπάμπης — 8-hour
+ 
+Γιάννης — 8-hour

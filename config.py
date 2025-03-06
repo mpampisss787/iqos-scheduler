@@ -1,4 +1,3 @@
-# config.py
 import os
 
 class BaseConfig:
@@ -18,6 +17,10 @@ class BaseConfig:
         "Saturday":  {"morning": 3, "evening": 3},
         "Sunday":    {"morning": 3, "evening": 3},
     }
+
+    # New settings for preferred assignment override behavior:
+    LOCK_PREFERRED_OVERRIDES = True  # True = Hard Rule: never override preferred assignments.
+    PREFERRED_OVERRIDE_THRESHOLD = 2  # In soft mode, override only if shortage >= threshold.
 
 class DevelopmentConfig(BaseConfig):
     DEBUG = True
