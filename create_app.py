@@ -5,12 +5,12 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_cors import CORS
 
-from .config import DevelopmentConfig
-from .models import db
+from config import DevelopmentConfig
+from models import db
 # Import your blueprint modules
-from .employees.routes import employees_bp
-from .schedule.routes import schedule_bp
-from .settings.routes import settings_bp
+from employees.routes import employees_bp
+from schedule.routes import schedule_bp
+from settings.routes import settings_bp
 
 def create_app():
     app = Flask(__name__, template_folder="templates")
