@@ -32,3 +32,4 @@ def create_app():
         return "<h3>Welcome! Go to /employees or /schedule or /settings</h3>"
 
     return app
+app = create_app()
