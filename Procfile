@@ -1,1 +1,1 @@
-gunicorn create_app:app --worker-class gevent --bind 0.0.0.0:$PORT
+gunicorn wsgi:app --worker-class gevent --bind 0.0.0.0:$PORT
