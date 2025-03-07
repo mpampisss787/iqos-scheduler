@@ -1,8 +1,8 @@
-Ηλιάνα — 6-hour (Requests: {'Friday': 'Morning'})
+Ηλιάνα — 6-hour (Manual Off: ['Saturday']) (Requests: {'Friday': 'Morning'})
  
 Δήμητρα — 8-hour (Prefers: ['Friday']) (Requests: {'Thursday': 'Morning'})
  
-Σμαράγδα — 8-hour (Prefers: ['Tuesday']) (Requests: {'Monday': 'Evening', 'Friday': 'Evening'})
+Σμαράγδα — 8-hour (Prefers: ['Tuesday']) (Requests: {'Monday': 'Evening', 'Wednesday': 'Morning', 'Friday': 'Evening'})
  
 Δώρα — 8-hour
  
@@ -17,3 +17,5 @@
 Μπάμπης — 8-hour
  
 Γιάννης — 8-hour
+
+Βασιλική — 8-hour (Prefers: ['Saturday'])

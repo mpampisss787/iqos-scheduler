@@ -1,10 +1,21 @@
 # models.py
+
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.types import TypeDecorator, TEXT
 import json
+from datetime import datetime
 
 db = SQLAlchemy()
+
+
+class PreviousSchedule(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.DateTime, default=datetime.utcnow)
+    data = db.Column(db.JSON, nullable=False)
+
+    def __repr__(self):
+        return f'<PreviousSchedule {self.date}>'
 
 class SafeJSONList(TypeDecorator):
     impl = TEXT

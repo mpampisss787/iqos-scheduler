@@ -1,8 +1,8 @@
 from flask import Blueprint, render_template, send_file, current_app
 import pandas as pd
-
+from collections import defaultdict
 from ..models import Employee
-from ..scheduler import generate_schedule
+from ..scheduler import create_schedule
 
 schedule_bp = Blueprint('schedule', __name__, template_folder='templates')
 
@@ -12,21 +12,29 @@ SCHEDULE_CACHE = None
 @schedule_bp.route('/')
 def schedule_view():
     global SCHEDULE_CACHE
-    final_schedule = generate_schedule()  # uses DB + config from current_app
-    SCHEDULE_CACHE = final_schedule      # Cache the generated schedule
+    final_schedule = create_schedule()
+    SCHEDULE_CACHE = final_schedule
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     employee_schedule = {}
-    # Build a dictionary: employee -> day -> shift
+
     for d in days:
         for entry in final_schedule[d]:
             emp = entry["employee"]
             shift = entry["shift"]
-            # If the shift was explicitly requested, mark it with a star.
-            if entry.get("explicit") and ("Morning" in shift or "Evening" in shift):
-                shift += " ★"
+            source = entry.get("source", "")
+
+            if shift == "Assigned Day Off":
+                if source == "dynamic":
+                    shift = "Day Off"
+                elif source == "preferred":
+                    shift = "Preferred Day Off"
+                elif source == "manual":
+                    shift = "Manual Day Off"
+
             if emp not in employee_schedule:
                 employee_schedule[emp] = {}
             employee_schedule[emp][d] = shift
+
     employees = sorted(employee_schedule.keys())
     return render_template(
         'schedule.html',
@@ -35,10 +43,15 @@ def schedule_view():
         employee_schedule=employee_schedule
     )
 
+
+
+
+
+
 @schedule_bp.route('/download_csv')
 def download_csv():
     global SCHEDULE_CACHE
-    final_schedule = SCHEDULE_CACHE if SCHEDULE_CACHE is not None else generate_schedule()
+    final_schedule = SCHEDULE_CACHE if SCHEDULE_CACHE is not None else create_schedule()
     rows = []
     for day, items in final_schedule.items():
         for obj in items:
@@ -55,7 +68,7 @@ def download_csv():
 @schedule_bp.route('/download_txt')
 def download_txt():
     global SCHEDULE_CACHE
-    final_schedule = SCHEDULE_CACHE if SCHEDULE_CACHE is not None else generate_schedule()
+    final_schedule = SCHEDULE_CACHE if SCHEDULE_CACHE is not None else create_schedule()
     all_employees = sorted([emp.name for emp in Employee.query.all()], key=lambda x: x.strip())
     config = current_app.config
     week_working_days = config.get("WEEK_WORKING_DAYS", 7)
