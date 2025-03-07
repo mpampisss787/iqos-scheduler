@@ -2,8 +2,14 @@ import os
 
 class BaseConfig:
     SECRET_KEY = os.environ.get("SECRET_KEY", "your-secret-key")
+    
+    # Use PostgreSQL in production, fallback to SQLite for local development
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL", "sqlite:///store_scheduler.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+    # Ensure PostgreSQL works properly on Render
+    if SQLALCHEMY_DATABASE_URI.startswith("postgres://"):
+        SQLALCHEMY_DATABASE_URI = SQLALCHEMY_DATABASE_URI.replace("postgres://", "postgresql://")
 
     # Scheduling Defaults
     WEEK_WORKING_DAYS = 6  # 6 = store closed on Sunday, 7 = all week
@@ -19,10 +25,8 @@ class BaseConfig:
     }
 
     # Preferred assignment override settings:
-    # LOCK_PREFERRED_OVERRIDES = True means do NOT override preferred off days.
-    # Set to False (via the settings tab) to allow overriding in worst-case scenarios.
     LOCK_PREFERRED_OVERRIDES = True
-    PREFERRED_OVERRIDE_THRESHOLD = 2  # (Not used in current logic; kept for reference.)
+    PREFERRED_OVERRIDE_THRESHOLD = 2  
     MAX_REBALANCE_ATTEMPTS = 10
 
 class DevelopmentConfig(BaseConfig):
