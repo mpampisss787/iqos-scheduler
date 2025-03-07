@@ -1,7 +1,7 @@
 from collections import defaultdict, Counter
 from flask import current_app
 from datetime import datetime
-from .models import PreviousSchedule, db, Employee
+from models import PreviousSchedule, db, Employee
 import random
 
 class Scheduler:
