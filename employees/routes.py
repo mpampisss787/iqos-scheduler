@@ -1,7 +1,7 @@
 # employees/routes.py
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
-from ..models import db, Employee
+from models import db, Employee
 
 employees_bp = Blueprint('employees', __name__, template_folder='templates')
 
