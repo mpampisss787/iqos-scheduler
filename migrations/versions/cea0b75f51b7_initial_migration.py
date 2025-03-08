@@ -7,7 +7,8 @@ Create Date: 2025-03-03 04:14:20.743452
 """
 from alembic import op
 import sqlalchemy as sa
-from .models import SafeJSONList
+from models import SafeJSONList
+
 
 
 # revision identifiers, used by Alembic.
