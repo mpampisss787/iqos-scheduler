@@ -92,30 +92,39 @@ class Scheduler:
         for emp in available_employees:
             request = (emp.shift_requests or {}).get(day)
             if request == "Morning":
-                morning_shift.append(emp)
+                morning_shift.append((emp, True))  # mark as preferred
             elif request == "Evening":
-                evening_shift.append(emp)
+                evening_shift.append((emp, True))
 
         # For remaining employees, assign shifts to balance staffing.
-        remaining_employees = [emp for emp in available_employees if emp not in morning_shift + evening_shift]
+        remaining_employees = [emp for emp in available_employees if emp not in [t[0] for t in morning_shift + evening_shift]]
         random.shuffle(remaining_employees)
         while remaining_employees:
             emp = remaining_employees.pop()
             if len(morning_shift) <= len(evening_shift):
-                morning_shift.append(emp)
+                morning_shift.append((emp, False))
             else:
-                evening_shift.append(emp)
+                evening_shift.append((emp, False))
 
-        for emp in morning_shift:
-            schedule[day].append({
+        # Create schedule entries.
+        for emp, preferred in morning_shift:
+            entry = {
                 "employee": emp.name,
-                "shift": self.get_shift_label(emp.shift_type, True)
-            })
-        for emp in evening_shift:
-            schedule[day].append({
+                "shift": self.get_shift_label(emp.shift_type, True),
+                "shift_type": emp.shift_type  # include shift type for flipping
+            }
+            if preferred:
+                entry["source"] = "preferred_shift"
+            schedule[day].append(entry)
+        for emp, preferred in evening_shift:
+            entry = {
                 "employee": emp.name,
-                "shift": self.get_shift_label(emp.shift_type, False)
-            })
+                "shift": self.get_shift_label(emp.shift_type, False),
+                "shift_type": emp.shift_type  # include shift type for flipping
+            }
+            if preferred:
+                entry["source"] = "preferred_shift"
+            schedule[day].append(entry)
 
     def enforce_min_staff(self, schedule, employees, off_days):
         # Only enforce staffing on working days.
@@ -123,20 +132,31 @@ class Scheduler:
             if self.week_working_days == 6 and day == "Sunday":
                 continue
 
-            shifts = schedule[day]
-            morning_count = len([s for s in shifts if "Morning" in s["shift"]])
-            evening_count = len([s for s in shifts if "Evening" in s["shift"]])
             min_staff = self.config.get("MIN_STAFF_PER_SHIFT_DAY", {}).get(day, {'morning': 3, 'evening': 3})
-
             attempts = 0
             max_attempts = self.config.get("MAX_REBALANCE_ATTEMPTS", 10)
-            while (morning_count < min_staff['morning'] or evening_count < min_staff['evening']) and attempts < max_attempts:
+            while attempts < max_attempts:
+                # Recalculate counts.
+                morning_count = len([s for s in schedule[day] if "Morning" in s["shift"]])
+                evening_count = len([s for s in schedule[day] if "Evening" in s["shift"]])
+                if morning_count >= min_staff['morning'] and evening_count >= min_staff['evening']:
+                    break
+
+                # First, attempt to flip dynamic shifts.
+                self.flip_dynamic_shifts(day, schedule, employees)
+                # Recalculate counts.
+                morning_count = len([s for s in schedule[day] if "Morning" in s["shift"]])
+                evening_count = len([s for s in schedule[day] if "Evening" in s["shift"]])
+                if morning_count >= min_staff['morning'] and evening_count >= min_staff['evening']:
+                    break
+
+                # Then, try rebalancing off days.
                 if not self.rebalance_days_off(schedule, off_days, employees, day):
                     break
+
+                # And try flipping again after rebalancing.
+                self.flip_dynamic_shifts(day, schedule, employees)
                 attempts += 1
-                available_employees = [emp for emp in employees if day not in off_days[emp.name]]
-                morning_count = len([s for s in schedule[day] if "Morning" in s["shift"] and s["employee"] in [e.name for e in available_employees]])
-                evening_count = len([s for s in schedule[day] if "Evening" in s["shift"] and s["employee"] in [e.name for e in available_employees]])
 
     def rebalance_days_off(self, schedule, off_days, employees, day):
         # Create a counter for how many employees have each off day.
@@ -166,7 +186,7 @@ class Scheduler:
                     current_morning = len([s for s in schedule[day] if "Morning" in s["shift"]])
                     current_evening = len([s for s in schedule[day] if "Evening" in s["shift"]])
                     new_shift = self.get_shift_label(emp.shift_type, True) if current_morning <= current_evening else self.get_shift_label(emp.shift_type, False)
-                    schedule[day].append({"employee": emp.name, "shift": new_shift})
+                    schedule[day].append({"employee": emp.name, "shift": new_shift, "shift_type": emp.shift_type})
                     return True
 
         # Step 1: Reassign dynamic off days.
@@ -188,7 +208,7 @@ class Scheduler:
                     current_morning = len([s for s in schedule[day] if "Morning" in s["shift"]])
                     current_evening = len([s for s in schedule[day] if "Evening" in s["shift"]])
                     new_shift = self.get_shift_label(emp.shift_type, True) if current_morning <= current_evening else self.get_shift_label(emp.shift_type, False)
-                    schedule[day].append({"employee": emp.name, "shift": new_shift})
+                    schedule[day].append({"employee": emp.name, "shift": new_shift, "shift_type": emp.shift_type})
                     return True
 
         # Step 2: Preferred override if allowed and staffing shortage persists.
@@ -211,10 +231,35 @@ class Scheduler:
                         current_morning = len([s for s in schedule[day] if "Morning" in s["shift"]])
                         current_evening = len([s for s in schedule[day] if "Evening" in s["shift"]])
                         new_shift = self.get_shift_label(emp.shift_type, True) if current_morning <= current_evening else self.get_shift_label(emp.shift_type, False)
-                        schedule[day].append({"employee": emp.name, "shift": new_shift})
+                        schedule[day].append({"employee": emp.name, "shift": new_shift, "shift_type": emp.shift_type})
                         return True
 
         return False
+
+    def flip_dynamic_shifts(self, day, schedule, employees):
+        # Get current entries for the day.
+        morning_entries = [entry for entry in schedule[day] if "Morning" in entry["shift"]]
+        evening_entries = [entry for entry in schedule[day] if "Evening" in entry["shift"]]
+        
+        min_staff = self.config.get("MIN_STAFF_PER_SHIFT_DAY", {}).get(day, {'morning': 0, 'evening': 0})
+        # Calculate shortage for evening shift.
+        shortage_evening = min_staff['evening'] - len(evening_entries)
+        
+        if shortage_evening > 0:
+            # Look for dynamic candidates in morning (not coming from an explicit shift request).
+            dynamic_morning = [entry for entry in morning_entries if entry.get("source") != "preferred_shift"]
+            for candidate in dynamic_morning:
+                # Ensure flipping candidate doesn't drop morning below its minimum.
+                if (len(morning_entries) - 1) >= min_staff['morning']:
+                    schedule[day].remove(candidate)
+                    candidate["shift"] = self.get_shift_label(candidate["shift_type"], is_morning=False)
+                    candidate["source"] = "flipped_dynamic"
+                    schedule[day].append(candidate)
+                    shortage_evening -= 1
+                    # Update morning_entries after removal.
+                    morning_entries = [entry for entry in schedule[day] if "Morning" in entry["shift"]]
+                    if shortage_evening <= 0:
+                        break
 
     def get_shift_label(self, shift_type, is_morning):
         if shift_type == "8-hour":

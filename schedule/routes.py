@@ -30,10 +30,14 @@ def schedule_view():
                     shift = "Preferred Day Off"
                 elif source == "manual":
                     shift = "Manual Day Off"
+            # Add a label for preferred shift assignments
+            elif source == "preferred_shift":
+                shift += " (P)"
 
             if emp not in employee_schedule:
                 employee_schedule[emp] = {}
             employee_schedule[emp][d] = shift
+
 
     employees = sorted(employee_schedule.keys())
     return render_template(
@@ -42,7 +46,6 @@ def schedule_view():
         days=days,
         employee_schedule=employee_schedule
     )
-
 
 
 
